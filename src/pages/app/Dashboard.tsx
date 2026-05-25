@@ -47,9 +47,9 @@ export default function Dashboard() {
   }, [currentUser]);
 
   useEffect(() => {
-    const unsub = subscribeToTasks('open', (t) => {
+    const unsub = subscribeToTasks((t) => {
       setOpenTasks(t.slice(0, 6));
-    });
+    }, 'open');
     return unsub;
   }, []);
 

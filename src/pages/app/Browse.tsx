@@ -17,7 +17,7 @@ export default function Browse() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = subscribeToTasks(undefined, (t) => {
+    const unsub = subscribeToTasks((t) => {
       setTasks(t);
       setLoading(false);
     });

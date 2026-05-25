@@ -9,9 +9,12 @@ import { cn } from '../../lib/utils';
 //   icon?: React.ReactNode;
 // }
 
-type ButtonProps = Omit<HTMLMotionProps<"button">, "onDrag"> & {
+type ButtonProps = Omit<HTMLMotionProps<"button">, "onDrag" | "children"> & {
+  children?: React.ReactNode;
   variant?: "primary" | "secondary" | "danger" | "ghost";
+  size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
+  icon?: React.ReactNode;
 };
     
 export default function Button({
