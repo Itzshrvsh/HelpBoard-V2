@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-surface-800;
+  }
+  
+  body {
+    @apply bg-surface-950 text-surface-100;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface-900;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-500;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-surface-900/80 backdrop-blur-xl border border-surface-800/50;
+  }
+
+  .glass-light {
+    @apply bg-surface-800/60 backdrop-blur-md border border-surface-700/40;
+  }
+
+  .gradient-border {
+    @apply relative;
+  }
+  .gradient-border::before {
+    content: '';
+    @apply absolute inset-0 rounded-xl p-[1px] bg-gradient-to-br from-primary-500/40 to-primary-800/20;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .status-open { @apply bg-emerald-500/15 text-emerald-400 border border-emerald-500/30; }
+  .status-claimed { @apply bg-blue-500/15 text-blue-400 border border-blue-500/30; }
+  .status-shortlisted { @apply bg-amber-500/15 text-amber-400 border border-amber-500/30; }
+  .status-assigned { @apply bg-violet-500/15 text-violet-400 border border-violet-500/30; }
+  .status-in_progress { @apply bg-sky-500/15 text-sky-400 border border-sky-500/30; }
+  .status-pending_confirmation { @apply bg-orange-500/15 text-orange-400 border border-orange-500/30; }
+  .status-completed { @apply bg-emerald-500/15 text-emerald-400 border border-emerald-500/30; }
+  .status-cancelled { @apply bg-surface-500/15 text-surface-400 border border-surface-500/30; }
+  .status-disputed { @apply bg-red-500/15 text-red-400 border border-red-500/30; }
+}

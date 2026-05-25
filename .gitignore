@@ -1,0 +1,5 @@
+.env
+firestore.rules
+.env.example
+node_modules
+.gitignore
