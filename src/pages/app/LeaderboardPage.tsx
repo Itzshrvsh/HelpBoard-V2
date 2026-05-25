@@ -99,8 +99,15 @@ export default function LeaderboardPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold text-amber-400">
-                    {sortBy === 'rating' ? (entry.averageHelperRating || entry.averageClientRating || '-').toFixed(1) : formatCredits(sortBy === 'tasksCompleted' ? entry.totalTasksCompleted : entry.totalCreditsEarned)}
-                  </p>
+                      {sortBy === 'rating'
+                        ? typeof (entry.averageHelperRating ?? entry.averageClientRating) === 'number'
+                          ? (entry.averageHelperRating ?? entry.averageClientRating).toFixed(1)
+                          : '-'
+                        : formatCredits(
+                            sortBy === 'tasksCompleted'
+                              ? entry.totalTasksCompleted
+                              : entry.totalCreditsEarned
+                          )}                  </p>
                   <p className="text-xs text-surface-500">
                     {sortBy === 'tasksCompleted' ? 'tasks' : sortBy === 'creditsEarned' ? 'credits' : 'rating'}
                   </p>

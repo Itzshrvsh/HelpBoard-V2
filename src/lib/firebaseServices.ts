@@ -160,7 +160,7 @@ export async function createTask(data: Omit<Task, 'id' | 'createdAt' | 'updatedA
   return taskRef.id;
 }
 
-export function subscribeToTasks(status?: TaskStatus, callback: (tasks: Task[]) => void) {
+export function subscribeToTasks(callback: (tasks: Task[]) => void,status?: TaskStatus) {
   let q;
   if (status) {
     q = query(
@@ -1412,45 +1412,44 @@ export async function submitRevisedProject(
   const workspaceRef = doc(db, 'projectWorkspaces', workspaceId);
   const ref = doc(collection(db, 'deliveries'));
 
-  let version: number;
+ let version = 1;
 
-  await runTransaction(db, async (transaction) => {
-    // All reads first
-    const workspaceSnap = await transaction.get(workspaceRef);
-    if (!workspaceSnap.exists()) throw new Error('Workspace not found');
-    const workspace = workspaceSnap.data() as ProjectWorkspace;
-    version = (workspace.currentVersion || 0) + 1;
+await runTransaction(db, async (transaction) => {
+  const workspaceSnap = await transaction.get(workspaceRef);
+  if (!workspaceSnap.exists()) throw new Error('Workspace not found');
 
-    // Then all writes
-    transaction.set(ref, {
-      id: ref.id,
-      workspaceId,
-      taskId,
-      helperId,
-      version,
-      isRevision: true,
-      deliveryNotes: data.deliveryNotes,
-      versionLabel: data.versionLabel,
-      checklistCompleted: Object.values(data.checklist).every(Boolean),
-      checklist: data.checklist,
-      files: data.files,
-      proofVideo: data.proofVideo,
-      status: 'submitted',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+  const workspace = workspaceSnap.data() as ProjectWorkspace;
+  version = (workspace.currentVersion || 0) + 1;
 
-    transaction.update(workspaceRef, {
-      currentVersion: version,
-      status: 'delivered',
-      updatedAt: serverTimestamp(),
-    });
-
-    transaction.update(doc(db, 'tasks', taskId), {
-      status: 'pending_confirmation',
-      updatedAt: serverTimestamp(),
-    });
+  transaction.set(ref, {
+    id: ref.id,
+    workspaceId,
+    taskId,
+    helperId,
+    version,
+    isRevision: true,
+    deliveryNotes: data.deliveryNotes,
+    versionLabel: data.versionLabel,
+    checklistCompleted: Object.values(data.checklist).every(Boolean),
+    checklist: data.checklist,
+    files: data.files,
+    proofVideo: data.proofVideo,
+    status: 'submitted',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
+
+  transaction.update(workspaceRef, {
+    currentVersion: version,
+    status: 'delivered',
+    updatedAt: serverTimestamp(),
+  });
+
+  transaction.update(doc(db, 'tasks', taskId), {
+    status: 'pending_confirmation',
+    updatedAt: serverTimestamp(),
+  });
+});
 
   const taskSnap = await getDoc(doc(db, 'tasks', taskId));
   const task = taskSnap.data() as Task;

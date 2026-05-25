@@ -26,7 +26,7 @@ export default function Input({ label, error, icon, className, ...props }: Input
             'w-full bg-surface-800/50 border text-white placeholder-surface-500 rounded-lg px-3 py-2.5',
             'focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/50',
             'transition-all duration-200',
-            icon && 'pl-10',
+            icon ? "pl-10" : undefined,
             error && 'border-red-500/50 focus:ring-red-500/50',
             className
           )}

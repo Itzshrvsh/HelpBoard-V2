@@ -1,14 +1,19 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { HTMLMotionProps, motion } from 'framer-motion';
 import { cn } from '../../lib/utils';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
-  loading?: boolean;
-  icon?: React.ReactNode;
-}
+// interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+//   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+//   size?: 'sm' | 'md' | 'lg';
+//   loading?: boolean;
+//   icon?: React.ReactNode;
+// }
 
+type ButtonProps = Omit<HTMLMotionProps<"button">, "onDrag"> & {
+  variant?: "primary" | "secondary" | "danger" | "ghost";
+  loading?: boolean;
+};
+    
 export default function Button({
   children,
   variant = 'primary',
