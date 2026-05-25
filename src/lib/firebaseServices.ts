@@ -8,7 +8,7 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, up
 import { auth, db, storage } from './firebase';
 import { formatCredits } from './utils';
 import type {
-  UserProfile, Task, TaskStatus, Chat, Message, Transaction, Rating, PlatformSettings, AdminLog,
+  UserProfile, Task, TaskStatus, Chat, Message, Transaction, CreditRequest, Rating, PlatformSettings, AdminLog,
   Dispute, LeaderboardStats, ProjectWorkspace, ProgressUpdate, ProgressStatus,
   Delivery, DeliveryFile, ProofVideo, Notification, NotificationType, DisputeAction,
   DisputeSeverity, DisputeReason, DeliveryChecklist
@@ -672,14 +672,14 @@ export function subscribeToAllTransactions(callback: (transactions: Transaction[
   });
 }
 
-export function subscribeToCreditRequests(callback: (requests: Transaction[]) => void) {
+export function subscribeToCreditRequests(callback: (requests: CreditRequest[]) => void) {
   const q = query(
     collection(db, 'creditRequests'),
     orderBy('createdAt', 'desc'),
     limit(50)
   );
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as Transaction)));
+    callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as CreditRequest)));
   });
 }
 

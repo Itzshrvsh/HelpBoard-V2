@@ -129,6 +129,21 @@ export interface Rating {
   createdAt: Timestamp;
 }
 
+// ===== Credit Request =====
+export interface CreditRequest {
+  id: string;
+  userId: string;
+  userEmail: string;
+  amount: number;
+  paymentMethod: string;
+  proofUrl: string;
+  status: TransactionStatus;
+  adminId?: string;
+  reason?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 // ===== Platform Settings =====
 export interface PlatformSettings {
   platformFeePercent: number;

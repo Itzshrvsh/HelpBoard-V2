@@ -24,26 +24,38 @@ export default function BuyCredits() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || !proofFile) {
-      toast.error('Please fill all fields and upload payment proof');
+
+    const amountNum = parseInt(amount);
+    if (!amount || isNaN(amountNum) || amountNum <= 0) {
+      toast.error('Please enter a valid credit amount');
+      return;
+    }
+    if (!proofFile) {
+      toast.error('Please upload payment proof');
+      (document.querySelector('input[type="file"]') as HTMLInputElement)?.focus();
       return;
     }
 
     setLoading(true);
     try {
-      // Upload proof image
-      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-      const { storage } = await import('../../lib/firebase');
-      const storageRef = ref(storage, `payment-proofs/${userProfile?.uid}/${Date.now()}_${proofFile.name}`);
-      await uploadBytes(storageRef, proofFile);
-      const url = await getDownloadURL(storageRef);
+      // Convert proof image to base64 data URL
+      const proofUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(ev.target?.result as string);
+        reader.onerror = () => reject(new Error('Failed to read proof image'));
+        reader.readAsDataURL(proofFile!);
+      });
 
-      await submitPaymentProof(parseInt(amount), paymentMethod, url);
+      await submitPaymentProof(amountNum, paymentMethod, proofUrl);
       toast.success('Payment proof submitted! Waiting for admin approval.');
       setAmount('');
       setProofFile(null);
+      // Reset file input
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
     } catch (err: any) {
-      toast.error(err.message);
+      console.error('Payment submission error:', err);
+      toast.error(err.message || 'Failed to submit payment. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -76,7 +88,7 @@ export default function BuyCredits() {
             </div>
           )}
           {settings?.paymentInstructions && (
-            <p className="text-xs text-surface-400 whitespace-pre-wrap">
+            <p className="text-xs text-surface-400 whitespace-pre-wrap mt-3">
               {settings.paymentInstructions}
             </p>
           )}
@@ -89,6 +101,7 @@ export default function BuyCredits() {
               label="Credit Amount"
               type="number"
               placeholder="100"
+              min="1"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               required
@@ -118,13 +131,16 @@ export default function BuyCredits() {
                 type="file"
                 accept="image/*"
                 onChange={(e) => setProofFile(e.target.files?.[0] || null)}
-                className="w-full text-sm text-surface-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-600/20 file:text-primary-400 hover:file:bg-primary-600/30"
+                className="w-full text-sm text-surface-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-600/20 file:text-primary-400 hover:file:bg-primary-600/30 cursor-pointer"
                 required
               />
+              {proofFile && (
+                <p className="text-xs text-emerald-400 mt-1">Selected: {proofFile.name}</p>
+              )}
             </div>
 
             <Button type="submit" loading={loading} className="w-full">
-              Submit Payment Proof
+              {loading ? 'Submitting...' : 'Submit Payment Proof'}
             </Button>
           </form>
         </Card>
