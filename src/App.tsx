@@ -34,6 +34,7 @@ import AdminWithdrawals from './pages/admin/AdminWithdrawals';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminLogs from './pages/admin/AdminLogs';
 import AdminDisputes from './pages/admin/AdminDisputes';
+import AdminMessaging from './pages/admin/AdminMessaging';
 
 export default function App() {
   return (
@@ -102,6 +103,7 @@ export default function App() {
         <Route path="settings" element={<AdminSettings />} />
         <Route path="disputes" element={<AdminDisputes />} />
         <Route path="logs" element={<AdminLogs />} />
+        <Route path="messaging" element={<AdminMessaging />} />
       </Route>
 
       {/* Admin login (no layout) */}

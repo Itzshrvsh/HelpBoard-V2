@@ -17,12 +17,15 @@ const notificationIcons: Record<string, string> = {
   video_proof_uploaded: '🎥',
   delivery_confirmed: '✅',
   credits_released: '💰',
+  credits_added: '💳',
+  credits_removed: '📤',
   rating_required: '⭐',
   dispute_raised: '⚖️',
   rework_requested: '🔧',
   revised_project_uploaded: '📦',
   task_reassigned: '🔄',
   dispute_resolved: '⚖️',
+  admin_message: '📢',
 };
 
 export default function NotificationBell({ userId }: Props) {

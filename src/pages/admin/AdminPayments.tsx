@@ -97,16 +97,24 @@ export default function AdminPayments() {
         {history.map((req) => (
           <Card key={req.id} className="!p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-surface-300">{req.userEmail}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-surface-300 truncate">{req.userEmail}</p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-sm text-primary-400">⚡ {formatCredits(req.amount)}</span>
                   <span className="text-xs text-surface-500">· {req.paymentMethod}</span>
                 </div>
+                {req.proofUrl && (
+                  <button
+                    onClick={() => setSelectedProof(req.proofUrl)}
+                    className="text-xs text-primary-400 hover:text-primary-300 underline underline-offset-2 mt-1"
+                  >
+                    View Payment Proof
+                  </button>
+                )}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 {req.reason && (
-                  <span className="text-xs text-surface-500 max-w-[200px] truncate" title={req.reason}>
+                  <span className="text-xs text-surface-500 max-w-[200px] truncate hidden sm:inline" title={req.reason}>
                     {req.reason}
                   </span>
                 )}

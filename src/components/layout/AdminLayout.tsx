@@ -12,6 +12,7 @@ const sidebarLinks = [
   { to: '/admin/disputes', label: 'Disputes', icon: '⚖️' },
   { to: '/admin/settings', label: 'Settings', icon: '⚙️' },
   { to: '/admin/logs', label: 'Logs', icon: '📋' },
+  { to: '/admin/messaging', label: 'Messaging', icon: '📢' },
 ];
 
 export default function AdminLayout() {

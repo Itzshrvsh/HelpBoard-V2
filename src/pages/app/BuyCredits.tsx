@@ -5,7 +5,7 @@ import { submitPaymentProof, subscribeToPlatformSettings } from '../../lib/fireb
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
-import { formatCredits } from '../../lib/utils';
+import { formatCredits, compressImage } from '../../lib/utils';
 import type { PlatformSettings } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -38,13 +38,8 @@ export default function BuyCredits() {
 
     setLoading(true);
     try {
-      // Convert proof image to base64 data URL
-      const proofUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (ev) => resolve(ev.target?.result as string);
-        reader.onerror = () => reject(new Error('Failed to read proof image'));
-        reader.readAsDataURL(proofFile!);
-      });
+      // Compress proof image to stay well under Firestore's 1MB doc limit
+      const proofUrl = await compressImage(proofFile, 800, 0.8);
 
       await submitPaymentProof(amountNum, paymentMethod, proofUrl);
       toast.success('Payment proof submitted! Waiting for admin approval.');

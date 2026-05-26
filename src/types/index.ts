@@ -284,12 +284,15 @@ export type NotificationType =
   | 'video_proof_uploaded'
   | 'delivery_confirmed'
   | 'credits_released'
+  | 'credits_added'
+  | 'credits_removed'
   | 'rating_required'
   | 'dispute_raised'
   | 'rework_requested'
   | 'revised_project_uploaded'
   | 'task_reassigned'
-  | 'dispute_resolved';
+  | 'dispute_resolved'
+  | 'admin_message';
 
 export interface Notification {
   id: string;

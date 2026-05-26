@@ -26,11 +26,14 @@ export default function AdminSettings() {
   const [qrUploading, setQrUploading] = useState(false);
   const [qrImageError, setQrImageError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadingRef = useRef(false); // prevents onSnapshot from overwriting qrPaymentImage during upload
 
   useEffect(() => {
     const unsub = subscribeToPlatformSettings((s) => {
       setSettings(s);
-      if (s) {
+      if (s && !uploadingRef.current) {
+        // Only sync qrPaymentImage from Firestore when NOT in the middle of an upload
+        // Prevents the onSnapshot listener from overwriting the preview URL or new download URL
         setForm({
           platformFeePercent: String(s.platformFeePercent || 5),
           minWithdrawal: String(s.minWithdrawal || 100),
@@ -47,7 +50,7 @@ export default function AdminSettings() {
     return unsub;
   }, []);
 
-  const handleQrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -65,30 +68,98 @@ export default function AdminSettings() {
       return;
     }
 
+    // Save previous QR URL so we can restore it on failure
+    const previousQrUrl = form.qrPaymentImage;
+
+    // Prevent Firestore onSnapshot from overwriting qrPaymentImage during upload
+    uploadingRef.current = true;
     setQrUploading(true);
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
+    try {
+      // Read & compress the image client-side, then save directly to Firestore
+      // QR codes are small, so a compressed base64 data URL fits well within Firestore limits
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onload = () => {
+            // Resize to max 400px on longest side (QR codes don't need high res)
+            let { width, height } = img;
+            const MAX_SIZE = 400;
+            if (width > MAX_SIZE || height > MAX_SIZE) {
+              if (width > height) {
+                height = Math.round((height / width) * MAX_SIZE);
+                width = MAX_SIZE;
+              } else {
+                width = Math.round((width / height) * MAX_SIZE);
+                height = MAX_SIZE;
+              }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              reject(new Error('Failed to process image'));
+              return;
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Export as JPEG at 70% quality → tiny size, QR still scannable
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            resolve(compressedDataUrl);
+          };
+          img.onerror = () => reject(new Error('Failed to load image'));
+          img.src = ev.target?.result as string;
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+
+      // Show the compressed preview immediately
       setForm((prev) => ({ ...prev, qrPaymentImage: dataUrl }));
+
+      // Save directly to Firestore (no Storage upload needed)
+      if (currentUser) {
+        await updatePlatformSettings({ qrPaymentImage: dataUrl });
+        toast.success('QR image saved!');
+      }
+    } catch (err: any) {
+      console.error('QR upload error:', err);
+      // Restore the previous QR URL so the image doesn't disappear on failure
+      if (previousQrUrl) {
+        setForm((prev) => ({ ...prev, qrPaymentImage: previousQrUrl }));
+      } else {
+        setForm((prev) => ({ ...prev, qrPaymentImage: '' }));
+      }
+      toast.error(err.message || 'Failed to upload QR image. Please try again.');
+    } finally {
+      uploadingRef.current = false;
       setQrUploading(false);
-      toast.success('QR image loaded! Save settings to apply.');
       if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-    reader.onerror = () => {
-      setQrUploading(false);
-      toast.error('Failed to read image file. Try a different file or use a URL instead.');
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
-  const handleRemoveQr = () => {
+  const handleRemoveQr = async () => {
     setForm((prev) => ({ ...prev, qrPaymentImage: '' }));
+    // Auto-save removal
+    if (currentUser) {
+      try {
+        await updatePlatformSettings({ qrPaymentImage: '' });
+        toast.success('QR image removed');
+      } catch (err: any) {
+        console.error('Remove QR error:', err);
+      }
+    }
   };
 
   const handleSave = async () => {
     if (!currentUser) return;
+    if (qrUploading) {
+      toast.error('Please wait for the QR upload to complete');
+      return;
+    }
     try {
       await updatePlatformSettings({
         platformFeePercent: parseInt(form.platformFeePercent) || 5,
@@ -225,6 +296,11 @@ export default function AdminSettings() {
                 label="QR Image URL (alternative)"
                 value={form.qrPaymentImage}
                 onChange={(e) => setForm({ ...form, qrPaymentImage: e.target.value })}
+                onBlur={() => {
+                  if (form.qrPaymentImage && currentUser && !qrUploading) {
+                    updatePlatformSettings({ qrPaymentImage: form.qrPaymentImage }).catch(() => {});
+                  }
+                }}
                 placeholder="https://example.com/qr.png"
               />
             </div>

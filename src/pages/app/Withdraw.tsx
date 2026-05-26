@@ -5,7 +5,7 @@ import { requestWithdrawal, subscribeToPlatformSettings } from '../../lib/fireba
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
-import { formatCredits, validateCreditAmount } from '../../lib/utils';
+import { formatCredits, validateCreditAmount, compressImage } from '../../lib/utils';
 import type { PlatformSettings } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -14,6 +14,8 @@ export default function Withdraw() {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [amount, setAmount] = useState('');
   const [paymentDetails, setPaymentDetails] = useState('');
+  const [qrFile, setQrFile] = useState<File | null>(null);
+  const [qrPreview, setQrPreview] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -21,6 +23,42 @@ export default function Withdraw() {
     const unsub = subscribeToPlatformSettings((s) => setSettings(s));
     return unsub;
   }, []);
+
+  const handleQrFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setQrFile(null);
+      setQrPreview('');
+      setError('');
+      return;
+    }
+
+    // Validate PNG format
+    if (file.type !== 'image/png') {
+      setError('Please upload a PNG image');
+      setQrFile(null);
+      setQrPreview('');
+      e.target.value = '';
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setError('QR code image must be under 2MB');
+      setQrFile(null);
+      setQrPreview('');
+      e.target.value = '';
+      return;
+    }
+
+    setQrFile(file);
+    setError('');
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (ev) => setQrPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,12 +88,24 @@ export default function Withdraw() {
       return;
     }
 
+    if (!qrFile) {
+      setError('Please upload your QR code image');
+      return;
+    }
+
     setLoading(true);
     try {
-      await requestWithdrawal(amountNum, paymentDetails);
+      // Compress QR image to stay well under Firestore's 1MB doc limit
+      const proofUrl = await compressImage(qrFile, 400, 0.8);
+
+      await requestWithdrawal(amountNum, paymentDetails, proofUrl);
       toast.success('Withdrawal request submitted! Waiting for admin approval.');
       setAmount('');
       setPaymentDetails('');
+      setQrFile(null);
+      setQrPreview('');
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -92,6 +142,31 @@ export default function Withdraw() {
             required
             icon={<span className="text-primary-400">⚡</span>}
           />
+
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-surface-300">
+              Upload QR Code <span className="text-xs text-surface-500">(PNG only)</span>
+            </label>
+            <input
+              type="file"
+              accept=".png,image/png"
+              onChange={handleQrFileChange}
+              className="w-full text-sm text-surface-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-600/20 file:text-primary-400 hover:file:bg-primary-600/30 cursor-pointer"
+              required
+            />
+            {qrPreview && (
+              <div className="mt-3 bg-white p-2 rounded-xl inline-block">
+                <img
+                  src={qrPreview}
+                  alt="QR Code Preview"
+                  className="w-32 h-32 object-contain mx-auto rounded-lg"
+                />
+              </div>
+            )}
+            {qrFile && !qrPreview && (
+              <p className="text-xs text-emerald-400 mt-1">Selected: {qrFile.name}</p>
+            )}
+          </div>
 
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-surface-300">

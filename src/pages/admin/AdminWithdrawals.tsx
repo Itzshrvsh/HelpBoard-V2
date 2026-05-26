@@ -14,6 +14,7 @@ export default function AdminWithdrawals() {
   const [requests, setRequests] = useState<any[]>([]);
   const [rejectModal, setRejectModal] = useState<{ id: string; userId: string; amount: number } | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [selectedQr, setSelectedQr] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = subscribeToWithdrawalRequests(setRequests as any);
@@ -53,16 +54,24 @@ export default function AdminWithdrawals() {
       <div className="space-y-3 mb-8">
         {pending.map((req: any) => (
           <Card key={req.id} className="!p-4">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white">{req.userEmail}</p>
                 <p className="text-sm text-primary-400 font-semibold">⚡ {formatCredits(req.amount)}</p>
                 <p className="text-xs text-surface-400">{formatTimestamp(req.createdAt)}</p>
                 {req.paymentDetails && (
-                  <p className="text-xs text-surface-400 mt-1">Details: {req.paymentDetails}</p>
+                  <p className="text-xs text-surface-400 mt-1 break-words">Details: {req.paymentDetails}</p>
+                )}
+                {req.proofUrl && (
+                  <button
+                    onClick={() => setSelectedQr(req.proofUrl)}
+                    className="text-xs text-primary-400 hover:text-primary-300 underline underline-offset-2 mt-1.5"
+                  >
+                    View QR Code
+                  </button>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Button size="sm" onClick={() => handleApprove(req.id, req.userId, req.amount)}>Approve</Button>
                 <Button size="sm" variant="danger" onClick={() => setRejectModal({ id: req.id, userId: req.userId, amount: req.amount })}>Reject</Button>
               </div>
@@ -92,6 +101,29 @@ export default function AdminWithdrawals() {
           </Card>
         ))}
       </div>
+
+      {/* QR Code Image Preview Modal */}
+      <Modal isOpen={!!selectedQr} onClose={() => setSelectedQr(null)} title="Withdrawal QR Code">
+        {selectedQr && (
+          <div className="flex flex-col items-center gap-4">
+            <div className="bg-white p-4 rounded-xl">
+              <img
+                src={selectedQr}
+                alt="Withdrawal QR code"
+                className="max-w-full max-h-[70vh] rounded-lg object-contain"
+              />
+            </div>
+            <a
+              href={selectedQr}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary-400 hover:underline"
+            >
+              Open in new tab ↗
+            </a>
+          </div>
+        )}
+      </Modal>
 
       <Modal isOpen={!!rejectModal} onClose={() => setRejectModal(null)} title="Reject Withdrawal">
         <div className="space-y-4">

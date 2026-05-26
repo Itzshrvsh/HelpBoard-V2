@@ -7,6 +7,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db, storage } from './firebase';
 import { formatCredits } from './utils';
+import { logUserData, logTransaction, logAdminAction, logPaymentProof, logWithdrawalQr, logTaskData, logDisputeData, logCreditRequest, flushLogs } from './loggingService';
 import type {
   UserProfile, Task, TaskStatus, Chat, Message, Transaction, CreditRequest, Rating, PlatformSettings, AdminLog,
   Dispute, LeaderboardStats, ProjectWorkspace, ProgressUpdate, ProgressStatus,
@@ -40,6 +41,36 @@ export async function signUp(email: string, password: string, displayName: strin
     helperRatingCount: 0,
     isAdmin: false,
   });
+
+  // Log the new user to local.db (SQLite) and force-persist to IndexedDB
+  try {
+    await logUserData({
+      uid: cred.user.uid,
+      email,
+      displayName,
+      photoURL: '',
+      bio: '',
+      skills: [],
+      role: 'helper',
+      createdAt: null as any,
+      updatedAt: null as any,
+      isBlocked: false,
+      credits: 0,
+      creditsEarned: 0,
+      creditsSpent: 0,
+      tasksCompleted: 0,
+      tasksPosted: 0,
+      clientRating: 0,
+      clientRatingCount: 0,
+      helperRating: 0,
+      helperRatingCount: 0,
+      isAdmin: false,
+    });
+    await flushLogs();
+  } catch (err) {
+    console.error('Logging: Failed to log user data', err);
+  }
+
   return cred.user;
 }
 
@@ -73,6 +104,19 @@ export async function updateUserProfile(uid: string, data: Partial<UserProfile>)
     ...data,
     updatedAt: serverTimestamp(),
   });
+
+  // Log profile update to local.db (SQLite)
+  if (data.displayName || data.skills || data.bio) {
+    try {
+      const profile = await getUserProfile(uid);
+      if (profile) {
+        await logUserData(profile);
+        await flushLogs();
+      }
+    } catch (err) {
+      console.error('Logging: Failed to log profile update', err);
+    }
+  }
 }
 
 export async function updateUserRole(uid: string, role: 'client' | 'helper') {
@@ -80,6 +124,17 @@ export async function updateUserRole(uid: string, role: 'client' | 'helper') {
     role,
     updatedAt: serverTimestamp(),
   });
+
+  // Log role change to local.db (SQLite)
+  try {
+    const profile = await getUserProfile(uid);
+    if (profile) {
+      await logUserData(profile);
+      await flushLogs();
+    }
+  } catch (err) {
+    console.error('Logging: Failed to log role change', err);
+  }
 }
 
 export async function uploadProfilePhoto(uid: string, file: File): Promise<string> {
@@ -156,6 +211,21 @@ export async function createTask(data: Omit<Task, 'id' | 'createdAt' | 'updatedA
       updatedAt: serverTimestamp(),
     });
   });
+
+  // Log task data and transaction to Storage
+  logTaskData({
+    id: taskRef.id,
+    ...data,
+    status: 'open',
+    claimedHelpers: [],
+    shortlistedHelpers: [],
+    finalHelperId: null,
+    escrowHeld: true,
+    clientConfirmed: false,
+    helperConfirmed: false,
+    createdAt: null as any,
+    updatedAt: null as any,
+  } as Task).catch(err => console.error('Logging: Failed to log task data', err));
 
   return taskRef.id;
 }
@@ -241,6 +311,10 @@ export async function claimTask(taskId: string, userId: string, userName: string
       lastMessageTime: serverTimestamp(),
     });
   });
+
+  // Log to Storage
+  logAdminAction(userId, userName, 'claim_task', 'task', taskId, 'open', 'claimed', `${userName} claimed the task`)
+    .catch(err => console.error('Logging: Failed to log claim action', err));
 }
 
 export async function shortlistHelper(taskId: string, userId: string) {
@@ -261,6 +335,11 @@ export async function shortlistHelper(taskId: string, userId: string) {
       updatedAt: serverTimestamp(),
     });
   });
+
+  // Log to Storage
+  const currentUser = auth.currentUser;
+  logAdminAction(currentUser?.uid || '', currentUser?.displayName || 'Unknown', 'shortlist_helper', 'task', taskId, 'open', 'shortlisted', `Shortlisted helper ${userId}`)
+    .catch(err => console.error('Logging: Failed to log shortlist action', err));
 }
 
 export async function selectFinalHelper(taskId: string, userId: string) {
@@ -310,6 +389,10 @@ export async function selectFinalHelper(taskId: string, userId: string) {
       createdAt: serverTimestamp(),
     });
   });
+
+  // Log to Storage
+  logAdminAction(auth.currentUser?.uid || '', auth.currentUser?.displayName || 'Unknown', 'select_final_helper', 'task', taskId, 'shortlisted', 'assigned', `Selected helper ${userId}`)
+    .catch(err => console.error('Logging: Failed to log select helper', err));
 }
 
 export async function startTaskProgress(taskId: string, userId: string) {
@@ -328,6 +411,10 @@ export async function startTaskProgress(taskId: string, userId: string) {
       updatedAt: serverTimestamp(),
     });
   });
+
+  // Log to Storage
+  logAdminAction(userId, auth.currentUser?.displayName || 'Unknown', 'start_task_progress', 'task', taskId, 'assigned', 'in_progress', 'Helper started working')
+    .catch(err => console.error('Logging: Failed to log start progress', err));
 }
 
 export async function helperRequestsCompletion(taskId: string, userId: string) {
@@ -347,6 +434,10 @@ export async function helperRequestsCompletion(taskId: string, userId: string) {
       updatedAt: serverTimestamp(),
     });
   });
+
+  // Log to Storage
+  logAdminAction(userId, auth.currentUser?.displayName || 'Unknown', 'request_completion', 'task', taskId, 'in_progress', 'pending_confirmation', 'Helper requested completion')
+    .catch(err => console.error('Logging: Failed to log completion request', err));
 }
 
 export async function clientConfirmsCompletion(taskId: string, userId: string) {
@@ -397,6 +488,10 @@ export async function clientConfirmsCompletion(taskId: string, userId: string) {
       updatedAt: serverTimestamp(),
     });
   });
+
+  // Log task data and transaction to Storage
+  logAdminAction(userId, auth.currentUser?.displayName || 'Unknown', 'confirm_completion', 'task', taskId, 'pending_confirmation', 'completed', 'Client confirmed completion')
+    .catch(err => console.error('Logging: Failed to log completion confirmation', err));
 }
 
 export async function cancelTask(taskId: string, userId: string) {
@@ -415,6 +510,19 @@ export async function cancelTask(taskId: string, userId: string) {
       transaction.update(doc(db, 'users', userId), {
         credits: increment(task.creditBounty),
       });
+
+      // Notify user of refund
+      const notifRef = doc(collection(db, 'notifications'));
+      transaction.set(notifRef, {
+        id: notifRef.id,
+        userId,
+        taskId,
+        type: 'credits_added',
+        title: 'Task Cancelled — Credits Refunded',
+        message: `"${task.title}" has been cancelled. ${formatCredits(task.creditBounty)} credits have been refunded.`,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
     }
 
     transaction.update(taskRef, {
@@ -423,6 +531,10 @@ export async function cancelTask(taskId: string, userId: string) {
       updatedAt: serverTimestamp(),
     });
   });
+
+  // Log task cancellation to Storage
+  logAdminAction(userId, auth.currentUser?.displayName || 'Unknown', 'cancel_task', 'task', taskId, 'in_progress', 'cancelled', 'Task cancelled by client')
+    .catch(err => console.error('Logging: Failed to log task cancellation', err));
 }
 
 // ===== Chat Services =====
@@ -505,6 +617,12 @@ export async function sendMessage(chatId: string, content: string, type: 'text' 
     lastMessageTime: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
+
+  // Log message to Storage (only for non-text types)
+  if (type !== 'text') {
+    logAdminAction(user.uid, user.displayName || 'Unknown', `send_${type}`, 'chat', chatId, '', '', proofDescription || '')
+      .catch(err => console.error('Logging: Failed to log message', err));
+  }
 }
 
 export async function getChatByTaskAndHelper(taskId: string, helperId: string): Promise<string | null> {
@@ -553,9 +671,19 @@ export async function submitPaymentProof(amount: number, paymentMethod: string, 
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  // Log payment proof to local.db (SQLite)
+  if (proofUrl) {
+    try {
+      await logPaymentProof(user.uid, ref.id, proofUrl, amount, paymentMethod, user.email || '');
+      await flushLogs();
+    } catch (err) {
+      console.error('[Logging] Failed to log payment proof:', err);
+    }
+  }
 }
 
-export async function requestWithdrawal(amount: number, paymentDetails: string) {
+export async function requestWithdrawal(amount: number, paymentDetails: string, proofUrl?: string) {
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
 
@@ -586,11 +714,34 @@ export async function requestWithdrawal(amount: number, paymentDetails: string) 
       userEmail: user.email,
       amount,
       paymentDetails,
+      proofUrl: proofUrl || '',
       status: 'pending',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+
+    // Notify user
+    const notifRef = doc(collection(db, 'notifications'));
+    transaction.set(notifRef, {
+      id: notifRef.id,
+      userId: user.uid,
+      type: 'credits_removed',
+      title: 'Withdrawal Requested',
+      message: `${formatCredits(amount)} credits have been deducted for your withdrawal request.`,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
   });
+
+  // Log withdrawal QR to local.db (SQLite)
+  if (proofUrl) {
+    try {
+      await logWithdrawalQr(user.uid, ref.id, proofUrl, amount, paymentDetails, user.email || '');
+      await flushLogs();
+    } catch (err) {
+      console.error('[Logging] Failed to log withdrawal QR:', err);
+    }
+  }
 }
 
 // ===== Rating Services =====
@@ -653,11 +804,16 @@ export async function updatePlatformSettings(settings: Partial<PlatformSettings>
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
 
-  await updateDoc(doc(db, 'platformSettings', 'config'), {
+  await setDoc(doc(db, 'platformSettings', 'config'), {
     ...settings,
     updatedAt: serverTimestamp(),
     updatedBy: user.uid,
-  });
+  }, { merge: true });
+
+  // Log settings update to Storage
+  const changedKeys = Object.keys(settings).join(', ');
+  logAdminAction(user.uid, user.displayName || 'Admin', 'update_platform_settings', 'settings', 'config', '', '', `Updated: ${changedKeys}`)
+    .catch(err => console.error('Logging: Failed to log settings update', err));
 }
 
 // ===== Admin Services =====
@@ -733,7 +889,23 @@ export async function approveCreditRequest(requestId: string, userId: string, am
       reason: `Approved credit purchase of ${amount}`,
       createdAt: serverTimestamp(),
     });
+
+    // Notify user
+    const notifRef = doc(collection(db, 'notifications'));
+    transaction.set(notifRef, {
+      id: notifRef.id,
+      userId,
+      type: 'credits_added',
+      title: 'Credits Added! 🎉',
+      message: `${formatCredits(amount)} credits have been added to your account.`,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
   });
+
+  // Log admin action to Storage
+  logAdminAction(adminId, '', 'approve_credit_purchase', 'payment', requestId, 'pending', 'approved', `Approved credit purchase of ${amount}`)
+    .catch(err => console.error('Logging: Failed to log admin action', err));
 }
 
 export async function rejectCreditRequest(requestId: string, adminId: string, reason: string) {
@@ -754,6 +926,10 @@ export async function rejectCreditRequest(requestId: string, adminId: string, re
     reason,
     createdAt: serverTimestamp(),
   });
+
+  // Log admin action to Storage
+  logAdminAction(adminId, '', 'reject_credit_purchase', 'payment', requestId, 'pending', 'rejected', reason)
+    .catch(err => console.error('Logging: Failed to log admin action', err));
 }
 
 export async function approveWithdrawal(requestId: string, userId: string, amount: number, adminId: string) {
@@ -788,6 +964,10 @@ export async function approveWithdrawal(requestId: string, userId: string, amoun
     reason: `Withdrawal of ${amount} approved`,
     createdAt: serverTimestamp(),
   });
+
+  // Log admin action to Storage
+  logAdminAction(adminId, '', 'approve_withdrawal', 'withdrawal', requestId, 'pending', 'approved', `Withdrawal of ${amount} approved`)
+    .catch(err => console.error('Logging: Failed to log admin action', err));
 }
 
 export async function rejectWithdrawal(requestId: string, userId: string, amount: number, adminId: string, reason: string) {
@@ -816,7 +996,24 @@ export async function rejectWithdrawal(requestId: string, userId: string, amount
       reason,
       createdAt: serverTimestamp(),
     });
+
+    // Notify user of refund
+    const notifRef = doc(collection(db, 'notifications'));
+    transaction.set(notifRef, {
+      id: notifRef.id,
+      userId,
+      type: 'credits_added',
+      title: 'Withdrawal Rejected — Credits Refunded',
+      message: `Your withdrawal of ${formatCredits(amount)} credits was rejected. The amount has been refunded.
+Reason: ${reason}`,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
   });
+
+  // Log admin action to Storage
+  logAdminAction(adminId, '', 'reject_withdrawal', 'withdrawal', requestId, 'pending', 'rejected', reason)
+    .catch(err => console.error('Logging: Failed to log admin action', err));
 }
 
 export async function adminAdjustCredits(userId: string, amount: number, adminId: string, reason: string) {
@@ -852,7 +1049,28 @@ export async function adminAdjustCredits(userId: string, amount: number, adminId
       reason,
       createdAt: serverTimestamp(),
     });
+
+    // Notify user of credit adjustment
+    const notifRef = doc(collection(db, 'notifications'));
+    const isPositive = amount > 0;
+    transaction.set(notifRef, {
+      id: notifRef.id,
+      userId,
+      type: isPositive ? 'credits_added' : 'credits_removed',
+      title: isPositive ? 'Credits Added ✨' : 'Credits Removed',
+      message: isPositive
+        ? `${formatCredits(amount)} credits have been added to your account.
+Reason: ${reason}`
+        : `${formatCredits(Math.abs(amount))} credits have been deducted from your account.
+Reason: ${reason}`,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
   });
+
+  // Log admin action to Storage
+  logAdminAction(adminId, auth.currentUser?.displayName || 'Admin', 'adjust_credits', 'user', userId, '0', String(amount), reason)
+    .catch(err => console.error('Logging: Failed to log admin action', err));
 }
 
 export async function adminBlockUser(userId: string, adminId: string, block: boolean) {
@@ -871,6 +1089,10 @@ export async function adminBlockUser(userId: string, adminId: string, block: boo
     reason: '',
     createdAt: serverTimestamp(),
   });
+
+  // Log admin action to Storage
+  logAdminAction(adminId, '', block ? 'block_user' : 'unblock_user', 'user', userId, String(!block), String(block), '')
+    .catch(err => console.error('Logging: Failed to log admin action', err));
 }
 
 export async function resolveDispute(taskId: string, adminId: string, action: 'release_to_helper' | 'refund_client', reason: string) {
@@ -912,6 +1134,10 @@ export async function resolveDispute(taskId: string, adminId: string, action: 'r
     reason,
     createdAt: serverTimestamp(),
   });
+
+  // Log to Storage
+  logAdminAction(adminId, '', `resolve_dispute_${action}`, 'dispute', taskId, 'disputed', action === 'release_to_helper' ? 'completed' : 'cancelled', reason)
+    .catch(err => console.error('Logging: Failed to log dispute resolution', err));
 }
 
 export function subscribeToAllUsers(callback: (users: UserProfile[]) => void) {
@@ -1069,6 +1295,10 @@ export async function submitDelivery(
     message: `Helper submitted v${version} of "${task.title}". Review the delivery.`,
   });
 
+  // Log delivery submission to Storage
+  logAdminAction(helperId, auth.currentUser?.displayName || 'Unknown', 'submit_delivery', 'task', taskId, 'in_progress', 'pending_confirmation', `Submitted delivery v${version}`)
+    .catch(err => console.error('Logging: Failed to log delivery submission', err));
+
   return ref.id;
 }
 
@@ -1191,6 +1421,10 @@ export async function confirmDelivery(workspaceId: string, taskId: string, deliv
       createdAt: serverTimestamp(),
     });
   });
+
+  // Log delivery confirmation to Storage
+  logAdminAction(clientId, auth.currentUser?.displayName || 'Client', 'confirm_delivery', 'task', taskId, 'pending_confirmation', 'completed', 'Client confirmed delivery')
+    .catch(err => console.error('Logging: Failed to log delivery confirmation', err));
 }
 
 export async function logDownloadEvent(fileName: string, userId: string, taskId: string, deliveryId: string) {
@@ -1204,6 +1438,41 @@ export async function logDownloadEvent(fileName: string, userId: string, taskId:
     adminId: userId,
     createdAt: serverTimestamp(),
   });
+}
+
+// ===== Admin Messaging =====
+export async function sendAdminMessage(
+  userId: string,
+  title: string,
+  message: string,
+  adminName: string,
+  adminId: string
+) {
+  const notifRef = doc(collection(db, 'notifications'));
+  await setDoc(notifRef, {
+    id: notifRef.id,
+    userId,
+    type: 'admin_message',
+    title,
+    message,
+    read: false,
+    createdAt: serverTimestamp(),
+  });
+
+  // Log the admin action
+  await addDoc(collection(db, 'adminLogs'), {
+    adminId,
+    adminName,
+    action: 'send_admin_message',
+    targetType: 'user',
+    targetId: userId,
+    oldValue: '',
+    newValue: '',
+    reason: `Message: ${title} — ${message.substring(0, 100)}`,
+    createdAt: serverTimestamp(),
+  });
+
+  return notifRef.id;
 }
 
 // ===== Notification Services =====
@@ -1222,14 +1491,19 @@ async function createNotification(data: {
 }
 
 export function subscribeToNotifications(userId: string, callback: (notifications: Notification[]) => void) {
+  // No orderBy — sort client-side to avoid requiring a composite Firestore index
   const q = query(
     collection(db, 'notifications'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc'),
-    limit(50)
+    where('userId', '==', userId)
   );
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification)));
+    const notifs = snap.docs.map(d => ({ ...d.data(), id: d.id } as Notification));
+    // Sort by createdAt descending (most recent first)
+    notifs.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+    callback(notifs.slice(0, 50));
+  }, (error) => {
+    console.error('subscribeToNotifications error:', error);
+    callback([]);
   });
 }
 
@@ -1333,6 +1607,10 @@ export async function raiseDispute(
       createdAt: serverTimestamp(),
     });
   });
+
+  // Log dispute data to Storage
+  logAdminAction(raisedBy, raisedByName, 'raise_dispute', 'dispute', taskId, 'active', 'disputed', `${data.reason}: ${data.description}`)
+    .catch(err => console.error('Logging: Failed to log dispute', err));
 }
 
 export async function requestRework(
@@ -1395,6 +1673,10 @@ export async function requestRework(
       createdAt: serverTimestamp(),
     });
   });
+
+  // Log rework request to Storage
+  logAdminAction(adminId, adminName, 'request_rework', 'dispute', disputeId, 'disputed', 'rework', note)
+    .catch(err => console.error('Logging: Failed to log rework request', err));
 }
 
 export async function submitRevisedProject(
@@ -1461,6 +1743,10 @@ await runTransaction(db, async (transaction) => {
     title: 'Revised Project Submitted',
     message: `Helper submitted revised v${version} of "${task.title}". Changes: ${data.whatChanged}`,
   });
+
+  // Log revision submission to Storage
+  logAdminAction(helperId, '', 'submit_revised_project', 'task', taskId, 'rework', 'pending_confirmation', `Submitted revision v${version}: ${data.whatChanged}`)
+    .catch(err => console.error('Logging: Failed to log revision submission', err));
 
   return ref.id;
 }
@@ -1540,6 +1826,10 @@ export async function reassignTask(
       createdAt: serverTimestamp(),
     });
   });
+
+  // Log reassignment to Storage
+  logAdminAction(adminId, adminName, 'reassign_task', 'task', taskId, 'disputed', 'assigned', `Reassigned to ${newHelperName}. ${reason}`)
+    .catch(err => console.error('Logging: Failed to log task reassignment', err));
 }
 
 export async function resolveDisputeEnhanced(
@@ -1630,6 +1920,10 @@ export async function resolveDisputeEnhanced(
       createdAt: serverTimestamp(),
     });
   });
+
+  // Log dispute resolution to Storage
+  logAdminAction(adminId, adminName, `resolve_dispute_${action}`, 'dispute', taskId, 'disputed', action === 'release_to_helper' ? 'completed' : 'cancelled', reason)
+    .catch(err => console.error('Logging: Failed to log dispute resolution', err));
 }
 
 // Get disputes for a task

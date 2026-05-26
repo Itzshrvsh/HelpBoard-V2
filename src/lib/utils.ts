@@ -9,8 +9,9 @@ export function formatCredits(amount: number): string {
   return new Intl.NumberFormat('en-US').format(amount);
 }
 
-export function formatTimestamp(timestamp: Timestamp | null | undefined): string {
+export function formatTimestamp(timestamp: Timestamp | string | null | undefined): string {
   if (!timestamp) return 'N/A';
+  if (typeof timestamp === 'string') return format(new Date(timestamp), 'MMM d, yyyy h:mm a');
   return format(timestamp.toDate(), 'MMM d, yyyy h:mm a');
 }
 
@@ -59,6 +60,52 @@ export function validateCreditAmount(amount: number, min: number, max: number): 
   if (amount < min) return `Minimum amount is ${formatCredits(min)} credits`;
   if (amount > max) return `Maximum amount is ${formatCredits(max)} credits`;
   return null;
+}
+
+/** Compress an image file to a base64 data URL (max 800px, JPEG 80% quality).
+ *  Falls back to raw base64 if compression fails.
+ *  Keeps images well under Firestore's 1MB document limit.
+ */
+export function compressImage(file: File, maxSize: number = 800, quality: number = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        // Resize if needed
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = Math.round((height / width) * maxSize);
+            width = maxSize;
+          } else {
+            width = Math.round((width / height) * maxSize);
+            height = maxSize;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          // Fallback: return raw base64
+          resolve(ev.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      };
+      img.onerror = () => {
+        // Fallback: return raw base64
+        resolve(ev.target?.result as string);
+      };
+      img.src = ev.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.readAsDataURL(file);
+  });
 }
 
 export const RATE_LIMITS = {
